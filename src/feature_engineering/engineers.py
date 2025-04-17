@@ -106,7 +106,7 @@ class TaxFeatureEngineer(BaseFeatureEngineer):
         return train_data
 
 
-class MoexFeatureEngineer(BaseFeatureEngineer):
+class MOEXFeatureEngineer(BaseFeatureEngineer):
     def __init__(
         self, 
         target: str = 'MOEX',

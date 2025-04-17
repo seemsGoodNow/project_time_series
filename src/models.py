@@ -12,7 +12,7 @@ import numpy as np
 from catboost import CatBoostRegressor
 from sklearn.metrics import mean_absolute_error
 
-from .feature_engineering.strategies import BaselineFeatureEngineerStrategy
+from .feature_engineering.strategies import BaselineFeatureEngineerStrategy, ExternalFactorsFeatureEngineerStrategy
 from .feature_selection.selectors import SelectFromModelEmbeddedFeatureSelector
 from .hyperparams_optimizers import BaselineHyperparamsOptimizer
 from .model_evaluation.metrics import (

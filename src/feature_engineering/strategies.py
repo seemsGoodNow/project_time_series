@@ -12,8 +12,8 @@ from .engineers import (
     TimeSeriesFeatureEngineer,
     TaxFeatureEngineer,
     MOEXFeatureEngineer,
-    USDRUBFeatureEngineer,
-    InflationFeatureEngineer,
+    UsdRubFeatureEngineer,
+    InflationFeatureEngineer
 )
 
 
@@ -60,7 +60,7 @@ class ExternalFactorsFeatureEngineerStrategy(BaseFeatureEngineerStrategy):
 
         # Внешние признаки
         self.moex_fe = MOEXFeatureEngineer(date_col=date_col, lags=moex_lags)
-        self.usd_fe = USDRUBFeatureEngineer(date_col=date_col, lags=usd_lags)
+        self.usd_fe = UsdRubFeatureEngineer(date_col=date_col, lags=usd_lags)
         self.inflation_fe = InflationFeatureEngineer(date_col=date_col, lags=inflation_lags)
 
     def build_features(
