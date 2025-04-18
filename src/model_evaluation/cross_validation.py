@@ -56,7 +56,7 @@ def perform_cross_val(
         y_pred = model.predict(X_test)
         for key, func in additional_metrics.items():
             cv_loss[key].append(func(y_test, y_pred))
-        cv_loss['target_loss'].append(loss_func(y_test, y_pred))
+        cv_loss['target_loss'].append(loss_func(y_test, y_pred, test_idx))
         
     return CrossValidationResult(
         metrics=cv_loss,
