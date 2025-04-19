@@ -16,8 +16,9 @@ from .feature_engineering.strategies import BaselineFeatureEngineerStrategy
 from .feature_selection.selectors import SelectFromModelEmbeddedFeatureSelector
 from .hyperparams_optimizers import BaselineHyperparamsOptimizer
 from .model_evaluation.metrics import (
-    target_loss,
-    maximum_absolute_error
+    SimpleTargetLoss,
+    MaxAE,
+    MAE
 )
 from .model_evaluation.cross_validation import (
     split_period_for_cross_val
@@ -164,10 +165,10 @@ class BaselineModel(BaseModel):
                 'verbose': False
             },
             'cross_val_score_kws': {
-                'loss_func': target_loss,
+                'loss': SimpleTargetLoss(),
                 'additional_metrics': {
-                    'mae': mean_absolute_error,
-                    'max_ae': maximum_absolute_error,
+                    'mae': MAE(),
+                    'max_ae': MaxAE(),
                 },
             },
             'optuna_n_trials': 20,
