@@ -36,10 +36,12 @@ class TimeSeriesFeatureEngineer(BaseFeatureEngineer):
         holidays: Dict[str, Sequence[pd.Timestamp]]
     ) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
+        self._add_holidays_features(df=df, holidays=holidays)
+        # Зануляем таргет в праздники и выходные
+        df.loc[(df['is_holiday'] == 1) | (df['is_nowork'] == 1), self.target] = 0
         self._add_lag_features(df)
         # self._add_rolling_features(df)
         self._add_date_features(df)
-        self._add_holidays_features(df=df, holidays=holidays)
         df = df.dropna()
         return df
     
