@@ -10,7 +10,7 @@ from typing import List, Dict, Callable, Tuple
 import pandas as pd
 import numpy as np
 
-from .metrics import target_loss, maximum_absolute_error
+from .metrics import Metric, SimpleTargetLoss, MaxAE, MAE
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,8 +30,8 @@ def perform_cross_val(
     model_class,
     model_params: dict,
     splits: list,
-    loss_func: Callable = target_loss,
-    additional_metrics: Dict[str, Callable] = {'max_ae': maximum_absolute_error},
+    loss: Metric = SimpleTargetLoss(),
+    additional_metrics: Dict[str, Metric] = {'max_ae': MaxAE(), 'mae': MAE()},
     X=None,
     y=None,
 ) -> CrossValidationResult:
@@ -54,9 +54,9 @@ def perform_cross_val(
         model.fit(X_train, y_train)
         models.append(model)
         y_pred = model.predict(X_test)
-        for key, func in additional_metrics.items():
-            cv_loss[key].append(func(y_test, y_pred))
-        cv_loss['target_loss'].append(loss_func(y_test, y_pred, test_idx))
+        for key, metric in additional_metrics.items():
+            cv_loss[key].append(metric.calc(y_test, y_pred))
+        cv_loss['target_loss'].append(loss.calc(y_test, y_pred))
         
     return CrossValidationResult(
         metrics=cv_loss,
