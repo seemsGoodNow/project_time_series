@@ -65,24 +65,21 @@ class TargetLoss(Metric):
     
     def __init__(
         self, 
-        rate: pd.Series, 
+        rate: pd.Series = None, 
         max_ae: float = 0.42, 
-        max_ae_penalty: Union[int, float] = 10
+        max_ae_penalty: Union[int, float] = 1
     ):
         self._rate = rate
         self._max_ae = max_ae
         self._max_ae_penalty = max_ae_penalty
         
     def calc(self, y_true: pd.Series, y_pred: pd.Series) -> float:
-        
-        if not y_true.index.equals(y_pred.index):
-            raise ValueError("Индексные метки 'y_true' и 'y_pred' не совпадают.")
             
         diff = y_pred - y_true
         
         pos_diff = diff.where(diff > 0)
         # в случае перепрогноза экономически теряем
-        pos_loss = pos_diff * (self.rate.reindex(pos_diff.index) + 1) / 100
+        pos_loss = pos_diff * (self._rate.reindex(pos_diff.index) + 1) / 100
 
         neg_diff = diff.where(diff <= 0)
         # в случае недопрогноза экономически теряем
@@ -90,6 +87,6 @@ class TargetLoss(Metric):
         # 0.014 = ( (rate + 0.5) - (rate - 0.9) ) / 100
     
         # дополнительно штрафуем модель за превышение отклонения от допустимой границы требований заказчика      
-        add_loss = (diff.abs() > max_ae).sum() * max_ae_penalty
-    
+        add_loss = (diff.abs() > self._max_ae).sum() * self._max_ae_penalty
+
         return pos_loss.sum() + neg_loss.sum() + add_loss
