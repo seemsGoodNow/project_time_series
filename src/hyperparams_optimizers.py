@@ -9,9 +9,9 @@ from abc import ABC, abstractmethod
 import pandas as pd
 import optuna
 from catboost import CatBoostRegressor
-from sklearn.metrics import mean_absolute_error
 
-from .model_evaluation.metrics import target_loss
+from .model_evaluation.metrics import SimpleTargetLoss, MAE, MaxAE
+
 from .model_evaluation.cross_validation import (
     CrossValidationResult,
     perform_cross_val,
@@ -98,8 +98,8 @@ class BaselineHyperparamsOptimizer(BaseHyperparamsOptimizer):
     
     def __define_cross_val_score_kws(self, cross_val_score_kws: Optional[Dict] = None) -> NoReturn:
         self.cross_val_score_kws = {
-            'loss_func': target_loss,
-            'additional_metrics': {'mae': mean_absolute_error},
+            'loss': SimpleTargetLoss(),
+            'additional_metrics': {'mae': MAE(), 'max_ae': MaxAE()},
         }
         if cross_val_score_kws is not None:
             self.cross_val_score_kws.update(cross_val_score_kws)
