@@ -1,55 +1,95 @@
 """
 Модуль с используемыми функциями потерь и метриками для оценки моделей
 """
-
-from typing import Sequence
+from abc import ABC, abstractmethod
+from typing import Sequence, Union
 
 import numpy as np
+import pandas as pd
 
-def target_loss(y_true: Sequence, y_pred: Sequence) -> float:
-    """Целевая ошибка
 
-    Parameters
-    ----------
-    y_true : Sequence
-        _description_
-    y_pred : Sequence
-        _description_
+class Metric:
+    @abstractmethod
+    def calc(self, y_true, y_pred) -> float:
+        pass
 
-    Returns
-    -------
-    float
-        _description_
-    """
-    rate_filepath = 'data/rounia.xlsx'
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        rate_df = pd.read_excel(rate_filepath, engine="openpyxl")
-    rate_df['date'] = pd.to_datetime(rate_df['DT'])
-    rate_df = rate_df[['date', 'ruo']].rename(columns={'ruo': 'rate'})
-    rate_df = rate_df.sort_values('date').set_index('date')
-    rate = np.array(rate_df.iloc[idx]['rate'])
 
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    diff = y_pred - y_true
-    positive_diff = diff.clip(min=0)
-    negative_diff = diff.clip(max=0)
-
-    # экономические потери
-    loss = positive_diff * (rate + 1) / 100 - negative_diff * (rate + 0.5 - (rate - 0.9)) / 100
-
-    # требование заказчика
-    MAX_AE = 0.42
-    MAX_AE_IMPORTANCE = 1e6 # допустим, за ошибку прогноза больше 0.42 по абсолютному значению доп.штраф 1млн
-    excess_level = abs(diff) - MAX_AE
-    excess_level[excess_level > 0] = MAX_AE_IMPORTANCE
+class SimpleTargetLoss(Metric):
     
-    loss += excess_level
+    def __init__(
+        self, 
+        key_rate: float = 7,
+        additional_rate_diff: float = 0.5,
+        surplus_rate_diff: float = -0.9,
+        deficit_rate_diff: float = 1.0,
+        n_days_in_year: int = 1
+    ):
+        self._key_rate = key_rate
+        self._additional_rate = self._key_rate + additional_rate_diff
+        self._surplus_rate = self._key_rate + surplus_rate_diff
+        self._deficit_rate = self._key_rate + deficit_rate_diff
+        self._n_days_in_year = n_days_in_year
+    
+    def calc(self, y_true: Sequence, y_pred: Sequence) -> float:
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+        diff = y_pred - y_true
+        loss = np.abs(diff) * (
+            (diff > 0) * self._deficit_rate
+            + (diff < 0) * (self._additional_rate - self._additional_rate)
+        ) / 100 / self._n_days_in_year
+        return np.mean(loss) 
 
-    return np.mean(loss)
 
-def maximum_absolute_error(y_true: Sequence, y_pred: Sequence) -> float:
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-    return np.max(np.abs(y_pred-y_true))
+class MaxAE(Metric):
+    def __init__(self):
+        pass
+
+    def calc(self, y_true: Sequence, y_pred: Sequence) -> float:
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+        return np.max(np.abs(y_pred-y_true))
+    
+    
+class MAE(Metric):
+    def __init__(self):
+        pass
+
+    def calc(self, y_true: Sequence, y_pred: Sequence) -> float:
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+        return np.mean(np.abs(y_pred-y_true))
+
+
+class TargetLoss(Metric):
+    
+    def __init__(
+        self, 
+        rate: pd.Series, 
+        max_ae: float = 0.42, 
+        max_ae_penalty: Union[int, float] = 10
+    ):
+        self._rate = rate
+        self._max_ae = max_ae
+        self._max_ae_penalty = max_ae_penalty
+        
+    def calc(self, y_true: pd.Series, y_pred: pd.Series) -> float:
+        
+        if not y_true.index.equals(y_pred.index):
+            raise ValueError("Индексные метки 'y_true' и 'y_pred' не совпадают.")
+            
+        diff = y_pred - y_true
+        
+        pos_diff = diff.where(diff > 0)
+        # в случае перепрогноза экономически теряем
+        pos_loss = pos_diff * (self.rate.reindex(pos_diff.index) + 1) / 100
+
+        neg_diff = diff.where(diff <= 0)
+        # в случае недопрогноза экономически теряем
+        neg_loss = neg_diff.abs() * 0.014
+        # 0.014 = ( (rate + 0.5) - (rate - 0.9) ) / 100
+    
+        # дополнительно штрафуем модель за превышение отклонения от допустимой границы требований заказчика      
+        add_loss = (diff.abs() > max_ae).sum() * max_ae_penalty
+    
+        return pos_loss.sum() + neg_loss.sum() + add_loss
