@@ -122,9 +122,9 @@ class MOEXFeatureEngineer(BaseFeatureEngineer):
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        self._add_rolling_stats(df)
+        # self._add_rolling_stats(df)
         self._add_binary_flags(df)
-        self._add_trend_features(df)
+        # self._add_trend_features(df)
         df = df.dropna()
         return df
 
@@ -163,9 +163,9 @@ class UsdRubFeatureEngineer(BaseFeatureEngineer):
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        self._add_rolling_stats(df)
+        # self._add_rolling_stats(df)
         self._add_binary_flags(df)
-        self._add_trend_features(df)
+        # self._add_trend_features(df)
         df = df.dropna()
         return df
 
@@ -204,9 +204,9 @@ class InflationFeatureEngineer(BaseFeatureEngineer):
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        self._add_rolling_stats(df)
+        # self._add_rolling_stats(df)
         self._add_binary_flags(df)
-        self._add_trend_features(df)
+        # self._add_trend_features(df)
         df = df.dropna()
         return df
 

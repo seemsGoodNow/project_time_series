@@ -146,7 +146,7 @@ class BaselineModel(BaseModel):
         
     def __define_engineer_strategy_kws(self, engineer_strategy_kws: Dict) -> NoReturn:
         self.engineer_strategy_kws = {
-            'date_col': 'date', 'target': 'balance', 'lags': np.arange(self.test_size_days, 31)
+            'date_col': 'date', 'target': 'balance', 'lags': np.arange(1, 31)
         }
         self.engineer_strategy_kws.update(engineer_strategy_kws)
     
@@ -305,8 +305,10 @@ class ExternalFactorsModel(BaseModel):
 
     def __define_engineer_strategy_kws(self, engineer_strategy_kws: Dict) -> NoReturn:
         self.engineer_strategy_kws = {
-            'date_col': 'date', 'target': 'balance', 'lags': np.arange(self.test_size_days, 31),
-            'moex_lags': [1, 2, 3], 'usd_lags': [1, 2, 3], 'inflation_lags': [1]
+            'date_col': 'date', 'target': 'balance', 'lags': np.arange(1, 31),
+            'moex_lags': np.arange(1, 30),
+            'usd_lags': np.arange(1, 30),
+            'inflation_lags': np.arange(1, 6)
         }
         self.engineer_strategy_kws.update(engineer_strategy_kws)
 
@@ -324,10 +326,10 @@ class ExternalFactorsModel(BaseModel):
                 'verbose': False
             },
             'cross_val_score_kws': {
-                'loss_func': target_loss,
+                'loss': SimpleTargetLoss(),
                 'additional_metrics': {
-                    'mae': mean_absolute_error,
-                    'max_ae': maximum_absolute_error,
+                    'mae': MAE(),
+                    'max_ae': MaxAE(),
                 },
             },
             'optuna_n_trials': 20,
