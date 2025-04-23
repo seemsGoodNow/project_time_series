@@ -10,7 +10,7 @@ from typing import List, Dict, Callable, Tuple
 import pandas as pd
 import numpy as np
 
-from .metrics import Metric, SimpleTargetLoss, MaxAE, MAE
+from .metrics import Metric, TargetLoss, MaxAE, MAE, NumCriticalErrors, MoneyLoss
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,8 +30,8 @@ def perform_cross_val(
     model_class,
     model_params: dict,
     splits: list,
-    loss: Metric = SimpleTargetLoss(),
-    additional_metrics: Dict[str, Metric] = {'max_ae': MaxAE(), 'mae': MAE()},
+    loss: Metric = TargetLoss(),
+    additional_metrics: Dict[str, Metric] = {'max_ae': MaxAE(), 'mae': MAE(), 'num_errors_over_limit': NumCriticalErrors(), 'money_loss': MoneyLoss()},
     X=None,
     y=None,
 ) -> CrossValidationResult:
