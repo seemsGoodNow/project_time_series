@@ -6,6 +6,7 @@
 from abc import abstractmethod, ABC
 from typing import Dict, Tuple, List, NoReturn
 import collections
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -59,8 +60,12 @@ class CatBoostRegressorWrapper:
         preds = self.model.predict(X, **kwargs)
 
         if isinstance(X, pd.DataFrame):
-            mask = (X[self.holiday_col] == 1) | (X[self.nowork_col] == 1)
-            preds[mask.values] = 0.0
+            if self.holiday_col in X.columns and self.nowork_col in X.columns:
+                mask = (X[self.holiday_col] == 1) | (X[self.nowork_col] == 1)
+                preds[mask.values] = 0.0
+            else:
+                warnings.warn(
+                    f"Колонка {self.holiday_col} или {self.nowork_col} не найдена — предсказания не обнуляются.")
         else:
             raise ValueError("X должен быть pandas.DataFrame, чтобы использовать флаги")
 
@@ -68,7 +73,6 @@ class CatBoostRegressorWrapper:
 
     def __getattr__(self, name):
         return getattr(self.model, name)
-
 
 
 class BaselineModel(BaseModel):
@@ -232,7 +236,7 @@ class ExternalFactorsModel(BaseModel):
         hyperparams_optimizer_kws: Dict = {},
         cross_val_split_kws: Dict = {}
     ):
-        self.model_class = CatBoostRegressor
+        self.model_class = CatBoostRegressorWrapper
         self.__define_hyperparams_optimizer_kws(hyperparams_optimizer_kws)
         self.__define_cross_val_split_kws(cross_val_split_kws)
         self.test_size_days = self.cross_val_split_kws['test_size_weeks'] * 7
@@ -254,7 +258,7 @@ class ExternalFactorsModel(BaseModel):
         self.train_end = X.index.max()
         next_day = self.train_end + pd.DateOffset(days=1)
         self.expected_test_range = (next_day, next_day + pd.DateOffset(days=self.test_size_days - 1))
-        self.selected_features = self._select_features(X=X, y=y)
+        self.selected_features = list(set(self._select_features(X=X, y=y) + ['is_holiday', 'is_nowork']))
         self.cat_features = [item for item in self.cat_features if item in self.selected_features]
         self.hyperparams_optimizer_kws['parameter_ranges']['cat_features'] = self.cat_features
         opt = BaselineHyperparamsOptimizer(**self.hyperparams_optimizer_kws)
@@ -336,7 +340,10 @@ class ExternalFactorsModel(BaseModel):
 
     def __define_engineer_strategy_kws(self, engineer_strategy_kws: Dict) -> NoReturn:
         self.engineer_strategy_kws = {
-            'date_col': 'date', 'target': 'balance', 'lags': np.arange(1, 31)
+            'date_col': 'date', 'target': 'balance', 'lags': np.arange(1, 31),
+            'moex_lags': np.arange(1, 30),
+            'usd_lags': np.arange(1, 30),
+            'inflation_lags': np.arange(1, 6)
         }
         self.engineer_strategy_kws.update(engineer_strategy_kws)
 
