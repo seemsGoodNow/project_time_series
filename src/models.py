@@ -10,15 +10,16 @@ import collections
 import pandas as pd
 import numpy as np
 from catboost import CatBoostRegressor
-from sklearn.metrics import mean_absolute_error
 
 from .feature_engineering.strategies import BaselineFeatureEngineerStrategy
 from .feature_selection.selectors import SelectFromModelEmbeddedFeatureSelector
 from .hyperparams_optimizers import BaselineHyperparamsOptimizer
 from .model_evaluation.metrics import (
-    SimpleTargetLoss,
+    TargetLoss,
     MaxAE,
-    MAE
+    MAE,
+    NumCriticalErrors,
+    MoneyLoss,
 )
 from .model_evaluation.cross_validation import (
     split_period_for_cross_val
@@ -162,13 +163,16 @@ class BaselineModel(BaseModel):
                 'bagging_temperature': lambda trial: trial.suggest_float('bagging_temperature', 0, 2),
                 'max_ctr_complexity': lambda trial: trial.suggest_int('max_ctr_complexity', 1, 4),
                 'early_stopping_rounds': 25,
-                'verbose': False
+                'verbose': False,
+                "loss_function": "MAE",
             },
             'cross_val_score_kws': {
-                'loss': SimpleTargetLoss(),
+                'loss': TargetLoss(),
                 'additional_metrics': {
                     'mae': MAE(),
                     'max_ae': MaxAE(),
+                    'num_errors_over_limit': NumCriticalErrors(), 
+                    'money_loss': MoneyLoss(),
                 },
             },
             'optuna_n_trials': 20,
