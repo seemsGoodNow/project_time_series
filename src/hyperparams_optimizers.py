@@ -10,7 +10,7 @@ import pandas as pd
 import optuna
 from catboost import CatBoostRegressor
 
-from .model_evaluation.metrics import SimpleTargetLoss, MAE, MaxAE
+from .model_evaluation.metrics import Metric, TargetLoss, MaxAE, MAE, NumCriticalErrors, MoneyLoss
 
 from .model_evaluation.cross_validation import (
     CrossValidationResult,
@@ -91,15 +91,16 @@ class BaselineHyperparamsOptimizer(BaseHyperparamsOptimizer):
             'bagging_temperature': lambda trial: trial.suggest_float('bagging_temperature', 0, 2),
             'max_ctr_complexity': lambda trial: trial.suggest_int('max_ctr_complexity', 1, 4),
             'early_stopping_rounds': 25,
-            'verbose': False
+            'verbose': False,
+            "loss_function": "MAE"
         }
         if parameter_ranges is not None:
             self.parameter_ranges.update(parameter_ranges)
     
     def __define_cross_val_score_kws(self, cross_val_score_kws: Optional[Dict] = None) -> NoReturn:
         self.cross_val_score_kws = {
-            'loss': SimpleTargetLoss(),
-            'additional_metrics': {'mae': MAE(), 'max_ae': MaxAE()},
+            'loss': TargetLoss(),
+            'additional_metrics': {'max_ae': MaxAE(), 'mae': MAE(), 'num_errors_over_limit': NumCriticalErrors(), 'money_loss': MoneyLoss()},
         }
         if cross_val_score_kws is not None:
             self.cross_val_score_kws.update(cross_val_score_kws)
