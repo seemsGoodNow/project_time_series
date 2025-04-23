@@ -36,10 +36,12 @@ class TimeSeriesFeatureEngineer(BaseFeatureEngineer):
         holidays: Dict[str, Sequence[pd.Timestamp]]
     ) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
+        self._add_holidays_features(df=df, holidays=holidays)
+        # Зануляем таргет в праздники и выходные
+        df.loc[(df['is_holiday'] == 1) | (df['is_nowork'] == 1), self.target] = 0
         self._add_lag_features(df)
         # self._add_rolling_features(df)
         self._add_date_features(df)
-        self._add_holidays_features(df=df, holidays=holidays)
         df = df.dropna()
         return df
     
@@ -104,3 +106,126 @@ class TaxFeatureEngineer(BaseFeatureEngineer):
             if col != self.date_col:
                 train_data[col] = train_data[col].fillna(0).astype(int)
         return train_data
+
+
+class MOEXFeatureEngineer(BaseFeatureEngineer):
+    def __init__(
+        self, 
+        target: str = 'MOEX',
+        date_col: str = 'date',
+        lags: Optional[Iterable[int]] = None,
+        windows: Optional[Iterable[int]] = None
+    ):
+        self.target = target
+        self.date_col = date_col
+        self.lags = lags if lags is not None else np.arange(1, 30)
+        self.windows = windows if windows is not None else [3, 5, 10, 15, 30]
+    
+    def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.sort_values(self.date_col).copy()
+        self._add_lag_features(df)
+        # self._add_rolling_stats(df)
+        self._add_binary_flags(df)
+        # self._add_trend_features(df)
+        df = df.dropna()
+        return df
+
+    def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
+        for lag in self.lags:
+            df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
+    
+    def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
+            df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
+    
+    def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
+        df[f'{self.target}__is_growth'] = (df[self.target] > 0).astype(int)
+        df[f'{self.target}__is_drop'] = (df[self.target] < 0).astype(int)
+    
+    def _add_trend_features(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            roll_mean = df[self.target].rolling(window).mean()
+            df[f'{self.target}__trend_{window}'] = df[self.target] - roll_mean
+
+
+class UsdRubFeatureEngineer(BaseFeatureEngineer):
+    def __init__(
+        self, 
+        target: str = 'usd/rub',
+        date_col: str = 'date',
+        lags: Optional[Iterable[int]] = None,
+        windows: Optional[Iterable[int]] = None
+    ):
+        self.target = target
+        self.date_col = date_col
+        self.lags = lags if lags is not None else np.arange(1, 30)
+        self.windows = windows if windows is not None else [3, 5, 10, 15, 30]
+    
+    def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.sort_values(self.date_col).copy()
+        self._add_lag_features(df)
+        # self._add_rolling_stats(df)
+        self._add_binary_flags(df)
+        # self._add_trend_features(df)
+        df = df.dropna()
+        return df
+
+    def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
+        for lag in self.lags:
+            df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
+    
+    def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
+            df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
+    
+    def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
+        df[f'{self.target}__is_growth'] = (df[self.target] > 0).astype(int)
+        df[f'{self.target}__is_drop'] = (df[self.target] < 0).astype(int)
+    
+    def _add_trend_features(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            roll_mean = df[self.target].rolling(window).mean()
+            df[f'{self.target}__trend_{window}'] = df[self.target] - roll_mean
+
+
+class InflationFeatureEngineer(BaseFeatureEngineer):
+    def __init__(
+        self, 
+        target: str = 'inflation',
+        date_col: str = 'date',
+        lags: Optional[Iterable[int]] = None,
+        windows: Optional[Iterable[int]] = None
+    ):
+        self.target = target
+        self.date_col = date_col
+        self.lags = lags if lags is not None else [1, 2, 3, 6]
+        self.windows = windows if windows is not None else [3, 6]
+    
+    def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.sort_values(self.date_col).copy()
+        self._add_lag_features(df)
+        # self._add_rolling_stats(df)
+        self._add_binary_flags(df)
+        # self._add_trend_features(df)
+        df = df.dropna()
+        return df
+
+    def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
+        for lag in self.lags:
+            df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
+    
+    def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
+            df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
+    
+    def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
+        df[f'{self.target}__is_growth'] = (df[self.target].diff() > 0).astype(int)
+        df[f'{self.target}__is_drop'] = (df[self.target].diff() < 0).astype(int)
+
+    def _add_trend_features(self, df: pd.DataFrame) -> NoReturn:
+        for window in self.windows:
+            roll_mean = df[self.target].rolling(window).mean()
+            df[f'{self.target}__trend_{window}'] = df[self.target] - roll_mean
