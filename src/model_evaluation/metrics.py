@@ -22,7 +22,7 @@ class SimpleTargetLoss(Metric):
         additional_rate_diff: float = 0.5,
         surplus_rate_diff: float = -0.9,
         deficit_rate_diff: float = 1.0,
-        n_days_in_year: int = 1
+        n_days_in_year: int = 365
     ):
         self._key_rate = key_rate
         self._additional_rate = self._key_rate + additional_rate_diff
@@ -40,6 +40,14 @@ class SimpleTargetLoss(Metric):
         ) / 100 / self._n_days_in_year
         return np.mean(loss) 
 
+class MAE(Metric):
+    def __init__(self):
+        pass
+
+    def calc(self, y_true: Sequence, y_pred: Sequence) -> float:
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+        return np.mean(np.abs(y_pred-y_true))
 
 class MaxAE(Metric):
     def __init__(self):
@@ -50,16 +58,43 @@ class MaxAE(Metric):
         y_pred = np.array(y_pred)
         return np.max(np.abs(y_pred-y_true))
     
-    
-class MAE(Metric):
+class NumCriticalErrors(Metric):
     def __init__(self):
         pass
 
     def calc(self, y_true: Sequence, y_pred: Sequence) -> float:
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
-        return np.mean(np.abs(y_pred-y_true))
+        return np.count_nonzero(np.abs(y_pred-y_true) > 0.42)
+    
+class MoneyLoss(Metric):
+    
+    def __init__(
+        self, 
+        rate: pd.Series = None, 
+        max_ae: float = 0.42, 
+        max_ae_penalty: Union[int, float] = 1,
+        n_days_in_year: int = 365
+    ):
+        self._rate = rate
+        self._max_ae = max_ae
+        self._max_ae_penalty = max_ae_penalty
+        self._n_days_in_year = n_days_in_year
+        
+    def calc(self, y_true: pd.Series, y_pred: pd.Series) -> float:
+            
+        diff = y_pred - y_true
+        
+        pos_diff = diff.where(diff > 0)
+        # в случае перепрогноза экономически теряем
+        pos_loss = pos_diff * (self._rate.reindex(pos_diff.index) + 1) / 100 / self._n_days_in_year
 
+        neg_diff = diff.where(diff <= 0)
+        # в случае недопрогноза экономически теряем
+        neg_loss = neg_diff.abs() * 0.014 / self._n_days_in_year
+        # 0.014 = ( (rate + 0.5) - (rate - 0.9) ) / 100 
+
+        return pos_loss.sum() + neg_loss.sum()
 
 class TargetLoss(Metric):
     
@@ -67,11 +102,13 @@ class TargetLoss(Metric):
         self, 
         rate: pd.Series = None, 
         max_ae: float = 0.42, 
-        max_ae_penalty: Union[int, float] = 1
+        max_ae_penalty: Union[int, float] = 1,
+        n_days_in_year: int = 365
     ):
         self._rate = rate
         self._max_ae = max_ae
         self._max_ae_penalty = max_ae_penalty
+        self._n_days_in_year = n_days_in_year
         
     def calc(self, y_true: pd.Series, y_pred: pd.Series) -> float:
             
