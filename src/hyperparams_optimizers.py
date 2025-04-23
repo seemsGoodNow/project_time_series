@@ -10,7 +10,7 @@ import pandas as pd
 import optuna
 from catboost import CatBoostRegressor
 
-from .model_evaluation.metrics import Metric, TargetLoss, MaxAE, MAE, NumCriticalErrors, MoneyLoss
+from .model_evaluation.metrics import Metric, TargetLoss, MaxAE, MAE, NumCriticalErrors, MoneyLoss, LossForCatBoost, MetricForCatBoost
 
 from .model_evaluation.cross_validation import (
     CrossValidationResult,
@@ -92,7 +92,9 @@ class BaselineHyperparamsOptimizer(BaseHyperparamsOptimizer):
             'max_ctr_complexity': lambda trial: trial.suggest_int('max_ctr_complexity', 1, 4),
             'early_stopping_rounds': 25,
             'verbose': False,
-            "loss_function": "MAE"
+            "loss_function": LossForCatBoost(),
+            "eval_metric": MetricForCatBoost()
+
         }
         if parameter_ranges is not None:
             self.parameter_ranges.update(parameter_ranges)

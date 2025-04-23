@@ -116,14 +116,56 @@ class TargetLoss(Metric):
         
         pos_diff = diff.where(diff > 0)
         # в случае перепрогноза экономически теряем
-        pos_loss = pos_diff * (self._rate.reindex(pos_diff.index) + 1) / 100
+        pos_loss = pos_diff * (self._rate.reindex(pos_diff.index) + 1) / 100 / self._n_days_in_year
 
         neg_diff = diff.where(diff <= 0)
         # в случае недопрогноза экономически теряем
-        neg_loss = neg_diff.abs() * 0.014
+        neg_loss = neg_diff.abs() * 0.014 / self._n_days_in_year
         # 0.014 = ( (rate + 0.5) - (rate - 0.9) ) / 100
     
         # дополнительно штрафуем модель за превышение отклонения от допустимой границы требований заказчика      
         add_loss = (diff.abs() > self._max_ae).sum() * self._max_ae_penalty
 
         return pos_loss.sum() + neg_loss.sum() + add_loss
+
+class LossForCatBoost(object):
+    def calc_ders_range(self, approxes, targets, weights):
+        assert len(approxes) == len(targets)
+        if weights is not None:
+            assert len(weights) == len(approxes)
+        result = []
+        delta = 10**(-6)
+        max_ae = 0.42
+        add_penalty = 10
+        for i in range(len(targets)):
+            diff = targets[i] - approxes[i]
+            der1 = 0 if abs(diff) < delta else (4.2 if diff>0 else -1.4)
+            # 4.2 is average ruonia during 2021
+            # 1.4 == 0.9 - (0.05)
+            der2 = 0
+            result.append((der1, der2))
+        return result
+    
+class MetricForCatBoost(object):
+    def get_final_error(self, error, weight):
+        return np.sqrt(error / (weight + 1e-38))
+    
+    def is_max_optimal(self):
+        return False
+    
+    def evaluate(self, approxes, target, weight):
+        assert len(approxes) == 1
+        assert len(target) == len(approxes[0])
+        approx = approxes[0]
+        error_sum = 0.0
+        weight_sum = 0.0
+        max_ae = 0.42
+        add_penalty = 100 * 365 * 1
+        for i in range(len(approx)):
+            w = 1.0 if weight is None else weight[i]
+            weight_sum += w
+            diff = approx[i] - target[i]
+            error_sum += w * (4.2 * diff if diff > 0 else -1.4 * diff)
+            if diff > max_ae or diff < -max_ae:
+                error_sum += w * add_penalty
+        return error_sum, weight_sum

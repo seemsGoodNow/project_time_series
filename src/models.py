@@ -20,6 +20,8 @@ from .model_evaluation.metrics import (
     MAE,
     NumCriticalErrors,
     MoneyLoss,
+    LossForCatBoost,
+    MetricForCatBoost
 )
 from .model_evaluation.cross_validation import (
     split_period_for_cross_val
@@ -40,6 +42,36 @@ class BaseModel(ABC):
     def forecast(self):
         pass
 
+class CatBoostRegressorWrapper:
+    def __init__(self, **kwargs):
+        """
+        Класс-обертка для CatBoost c кастомным predict
+
+        :param holiday_col: название колонки-флага праздника
+        :param nowork_col: название колонки-флага нерабочего дня
+        :param kwargs: параметры для CatBoostRegressor
+        """
+        self.model = CatBoostRegressor(**kwargs)
+        self.holiday_col = 'is_holiday'
+        self.nowork_col = 'is_nowork'
+
+    def fit(self, X, y=None, **kwargs):
+        return self.model.fit(X, y, **kwargs)
+
+    def predict(self, X, **kwargs):
+        preds = self.model.predict(X, **kwargs)
+
+        if isinstance(X, pd.DataFrame):
+            mask = (X[self.holiday_col] == 1) | (X[self.nowork_col] == 1)
+            preds[mask.values] = 0.0
+        else:
+            raise ValueError("X должен быть pandas.DataFrame, чтобы использовать флаги")
+
+        return preds
+
+    def __getattr__(self, name):
+        return getattr(self.model, name)
+
 
 class BaselineModel(BaseModel):
     def __init__(
@@ -49,7 +81,7 @@ class BaselineModel(BaseModel):
         hyperparams_optimizer_kws: Dict = {},
         cross_val_split_kws: Dict = {}
     ):
-        self.model_class = CatBoostRegressor
+        self.model_class = CatBoostRegressorWrapper
         self.__define_hyperparams_optimizer_kws(hyperparams_optimizer_kws)
         self.__define_cross_val_split_kws(cross_val_split_kws)
         self.test_size_days = self.cross_val_split_kws['test_size_weeks'] * 7
@@ -164,7 +196,8 @@ class BaselineModel(BaseModel):
                 'max_ctr_complexity': lambda trial: trial.suggest_int('max_ctr_complexity', 1, 4),
                 'early_stopping_rounds': 25,
                 'verbose': False,
-                "loss_function": "MAE",
+                "loss_function": LossForCatBoost(),
+                "eval_metric": MetricForCatBoost()
             },
             'cross_val_score_kws': {
                 'loss': TargetLoss(),
