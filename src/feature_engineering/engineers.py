@@ -11,12 +11,19 @@ import numpy as np
 
 
 class BaseFeatureEngineer(ABC):
+    """Интерфейс для классов-инженеров фичей
+    """
     @abstractmethod
     def build_features(self):
         pass
 
 
 class TimeSeriesFeatureEngineer(BaseFeatureEngineer):
+    """Инженер фичей временного ряда для таргета:
+        1. Лаги (с 1 по 30)
+        2. День недели, месяца, месяц
+        3. Флаги того, что день недели между 15 и 20, между 20 и 25, между 25 и 30.
+    """
     def __init__(
         self, 
         target: str = 'balance',
@@ -40,7 +47,6 @@ class TimeSeriesFeatureEngineer(BaseFeatureEngineer):
         # Зануляем таргет в праздники и выходные
         df.loc[(df['is_holiday'] == 1) | (df['is_nowork'] == 1), self.target] = 0
         self._add_lag_features(df)
-        # self._add_rolling_features(df)
         self._add_date_features(df)
         df = df.dropna()
         return df
@@ -74,19 +80,21 @@ class TimeSeriesFeatureEngineer(BaseFeatureEngineer):
 
 
 class TaxFeatureEngineer(BaseFeatureEngineer):
+    """Инженер налоговых фичей, которые удалось спарсить из К+"""
+    
     def __init__(
-        self, 
+        self,
         target: str = 'balance',
         date_col: str = 'date',
     ):
-        self.target = target
         self.date_col = date_col
     
     def build_features(self, df: pd.DataFrame, taxes: pd.DataFrame) -> pd.DataFrame:
+        # Датафрейм, где в столбцах тип налога, а по индексу дата
         encoded_taxes = (
             pd.get_dummies(taxes, columns=['tax_type'])
             .drop(columns=['tax_subtype'])
-            .groupby(['date'])
+            .groupby([self.date_col])
             .sum()
             .astype(int)
             .reset_index()
@@ -98,6 +106,7 @@ class TaxFeatureEngineer(BaseFeatureEngineer):
             on=self.date_col,
             how='left'
         ).sort_values(self.date_col)
+        # Фильтр налогов за пределами нужного промежутка
         train_data = train_data[
             (train_data[self.date_col] >= df[self.date_col].min())
             & (train_data[self.date_col] <= df[self.date_col].max())
@@ -109,8 +118,10 @@ class TaxFeatureEngineer(BaseFeatureEngineer):
 
 
 class MOEXFeatureEngineer(BaseFeatureEngineer):
+    """Инженер фичей, связанных с индексом Мосбиржи (лаги изменения в прошлый день)
+    """
     def __init__(
-        self, 
+        self,
         target: str = 'MOEX',
         date_col: str = 'date',
         lags: Optional[Iterable[int]] = None,
@@ -120,29 +131,26 @@ class MOEXFeatureEngineer(BaseFeatureEngineer):
         self.date_col = date_col
         self.lags = lags if lags is not None else np.arange(1, 30)
         self.windows = windows if windows is not None else [3, 5, 10, 15, 30]
-    
+
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        # self._add_rolling_stats(df)
-        self._add_binary_flags(df)
-        # self._add_trend_features(df)
         df = df.dropna()
         return df
 
     def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
         for lag in self.lags:
             df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
-    
+
     def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
         for window in self.windows:
             df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
             df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
-    
+
     def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
         df[f'{self.target}__is_growth'] = (df[self.target] > 0).astype(int)
         df[f'{self.target}__is_drop'] = (df[self.target] < 0).astype(int)
-    
+
     def _add_trend_features(self, df: pd.DataFrame) -> NoReturn:
         for window in self.windows:
             roll_mean = df[self.target].rolling(window).mean()
@@ -150,8 +158,11 @@ class MOEXFeatureEngineer(BaseFeatureEngineer):
 
 
 class UsdRubFeatureEngineer(BaseFeatureEngineer):
+    """Инженер фичей, связанных с курсом доллара (лаги изменения в прошлый день)
+    """
+    
     def __init__(
-        self, 
+        self,
         target: str = 'usd/rub',
         date_col: str = 'date',
         lags: Optional[Iterable[int]] = None,
@@ -161,29 +172,26 @@ class UsdRubFeatureEngineer(BaseFeatureEngineer):
         self.date_col = date_col
         self.lags = lags if lags is not None else np.arange(1, 30)
         self.windows = windows if windows is not None else [3, 5, 10, 15, 30]
-    
+
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        # self._add_rolling_stats(df)
-        self._add_binary_flags(df)
-        # self._add_trend_features(df)
         df = df.dropna()
         return df
 
     def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
         for lag in self.lags:
             df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
-    
+
     def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
         for window in self.windows:
             df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
             df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
-    
+
     def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
         df[f'{self.target}__is_growth'] = (df[self.target] > 0).astype(int)
         df[f'{self.target}__is_drop'] = (df[self.target] < 0).astype(int)
-    
+
     def _add_trend_features(self, df: pd.DataFrame) -> NoReturn:
         for window in self.windows:
             roll_mean = df[self.target].rolling(window).mean()
@@ -191,8 +199,11 @@ class UsdRubFeatureEngineer(BaseFeatureEngineer):
 
 
 class InflationFeatureEngineer(BaseFeatureEngineer):
+    """Инженер фичей, связанных с инфляцией (лаги изменения в прошлый день)
+    """
+    
     def __init__(
-        self, 
+        self,
         target: str = 'inflation',
         date_col: str = 'date',
         lags: Optional[Iterable[int]] = None,
@@ -202,25 +213,22 @@ class InflationFeatureEngineer(BaseFeatureEngineer):
         self.date_col = date_col
         self.lags = lags if lags is not None else [1, 2, 3, 6]
         self.windows = windows if windows is not None else [3, 6]
-    
+
     def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values(self.date_col).copy()
         self._add_lag_features(df)
-        # self._add_rolling_stats(df)
-        self._add_binary_flags(df)
-        # self._add_trend_features(df)
         df = df.dropna()
         return df
 
     def _add_lag_features(self, df: pd.DataFrame) -> NoReturn:
         for lag in self.lags:
             df[f'{self.target}__lag_{lag}'] = df[self.target].shift(lag)
-    
+
     def _add_rolling_stats(self, df: pd.DataFrame) -> NoReturn:
         for window in self.windows:
             df[f'{self.target}__roll_mean_{window}'] = df[self.target].rolling(window).mean()
             df[f'{self.target}__roll_std_{window}'] = df[self.target].rolling(window).std()
-    
+
     def _add_binary_flags(self, df: pd.DataFrame) -> NoReturn:
         df[f'{self.target}__is_growth'] = (df[self.target].diff() > 0).astype(int)
         df[f'{self.target}__is_drop'] = (df[self.target].diff() < 0).astype(int)
