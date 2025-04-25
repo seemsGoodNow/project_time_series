@@ -1,10 +1,10 @@
 import numpy as np
 from scipy.stats import norm
 
-class CusumFinder():
+class BreakpointFinder():
     
-    def __init__(self, alpha, beta, mean_diff, trsh=2, breaks_max=5,
-                slice_length=15):
+    def __init__(self, alpha, beta, diff, ceil = 1e6, trsh=2, breaks_max=3,
+                slice_length=7):
         
         self.mean_hat = 0
         self.std_hat = 1
@@ -14,8 +14,10 @@ class CusumFinder():
         
         self.metric = 0
         
-        # ГИПЕРПАРАМЕТР: дельта для альтернативный гипотезы
-        self.mean_diff = mean_diff 
+        # ГИПЕРПАРАМЕТР: дельта для альтернативы
+        self.diff = diff 
+         # ГИПЕРПАРАМЕТР: верхняя граница для значения критерия
+        self.ceil = ceil
         # ГИПЕРПАРАМЕТР: порог для критерия
         self.trsh = trsh
         # ГИПЕРПАРАМЕТРЫ: макс. число разладок для принятия мер
@@ -25,7 +27,7 @@ class CusumFinder():
         self.breakpoints = []
         # ГИПЕРПАРАМЕТР: глубина среза значений метрики
         self.slice_length = slice_length
-        self.colors=['blue', 'red']
+        self.colors=['red', 'green']
         
     def get_values(self):
         # оцениваем mean и std^2
@@ -39,6 +41,10 @@ class CusumFinder():
     def update(self, new_value):
 
         self.get_values()
+
+        # Считаем обновлённое значение std и среднее
+        self.predicted_diff_value = (new_value - self.mean_hat) ** 2
+        self.predicted_diff_mean = self.var_hat
         
         # нормализация и стандартизация
         self.new_value_normalized = (new_value - self.mean_hat) / np.sqrt(self.std_hat)
@@ -62,12 +68,18 @@ class CusumFinder():
             self.var_weights_sum = 1.0      
 
     def count_metric(self):
+
         # проверка гипотезы о том, что среднее действительно = 0, с учётом того, что std = 1
         zeta_k = np.log(norm.pdf(self.new_value_normalized, self.mean_diff, 1) / 
                   norm.pdf(self.new_value_normalized, 0, 1))
-        self.metric = max(0, self.metric + zeta_k)
+        self.CumSumMetric = max(0, self.metric + zeta_k)
 
-        if self.metric > self.trsh:            
+        # проверка гипотезы о том, что среднее у разницы между std действительно = 0
+        adjusted_value = self.predicted_diff_value - self.predicted_diff_mean
+        likelihood = np.exp(self.sigma_diff * (adjusted_value - self.sigma_diff / 2.))
+        self.SRmetric = min(self.ceil, (1. + self.metric) * likelihood)
+
+        if self.CumSumMetric > self.trsh or self.SRmetric > self.trsh:            
             self.states.append(1)
         else:
             self.states.append(0)
@@ -75,4 +87,4 @@ class CusumFinder():
         if (np.array(self.states[-self.slice_length:]) == 1).sum() > self.breaks_max:
             self.breakpoints.append('red')
         else:
-            self.breakpoints.append('blue')
+            self.breakpoints.append('green')
