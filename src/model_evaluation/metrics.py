@@ -63,22 +63,6 @@ class MAE(Metric):
         return np.mean(np.abs(y_pred-y_true))
 
 
-class TargetLoss(Metric):
-    
-    def __init__(
-        self, 
-        rate: pd.Series, 
-        max_ae: float = 0.42, 
-        max_ae_penalty: Union[int, float] = 1e6
-    ):
-        self._rate = rate
-        self._max_ae = max_ae
-        self._max_ae_penalty = max_ae_penalty
-        
-    def calc(self, y_true: pd.Series, y_pred: pd.Series) -> float:
-        pass
-        
-
 class NumCriticalErrors(Metric):
     def __init__(self):
         pass
