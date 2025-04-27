@@ -171,6 +171,7 @@ class LossForCatBoost:
             result.append((der1, der2))
         return result
     
+
 class MetricForCatBoost:
     
     def get_final_error(self, error, weight):

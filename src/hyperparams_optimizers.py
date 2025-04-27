@@ -26,6 +26,7 @@ class BaseHyperparamsOptimizer(ABC):
 
 
 class BaselineHyperparamsOptimizer(BaseHyperparamsOptimizer):
+    """Перебор параметров с помощью Optuna (для CatBoost)"""
     def __init__(
         self,
         splits: List[Tuple[List[int], List[int]]],

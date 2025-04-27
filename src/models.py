@@ -2,7 +2,6 @@
 Модуль, содержащий различные модели, тестируемые для решения задачи о предсказании
 """
 
-
 from abc import abstractmethod, ABC
 from typing import Dict, Tuple, List, NoReturn
 import collections
@@ -18,7 +17,9 @@ from .hyperparams_optimizers import BaselineHyperparamsOptimizer
 from .model_evaluation.metrics import (
     SimpleTargetLoss,
     MaxAE,
-    MAE
+    MAE,
+    LossForCatBoost,
+    MetricForCatBoost
 )
 from .model_evaluation.cross_validation import (
     split_period_for_cross_val
@@ -76,6 +77,7 @@ class CatBoostRegressorWrapper:
 
 
 class BaselineModel(BaseModel):
+    """Модель с catboost под капотом, использующая налоги и признаки ряда"""
     def __init__(
         self,
         engineer_strategy_kws: Dict = {},
@@ -110,14 +112,34 @@ class BaselineModel(BaseModel):
         self.cat_features = [item for item in self.cat_features if item in self.selected_features]
         # Find best hyperparams combination
         self.hyperparams_optimizer_kws['parameter_ranges']['cat_features'] = self.cat_features
-        opt = BaselineHyperparamsOptimizer(**self.hyperparams_optimizer_kws)
-        self.best_params = opt.get_optimized_params(X[self.selected_features], y)
+        self.opt = BaselineHyperparamsOptimizer(**self.hyperparams_optimizer_kws)
+        self.best_params = self.opt.get_optimized_params(X[self.selected_features], y)
         # fit models with best params for averaging predictions
-        cross_val_result = opt.get_fitted_models_and_metrics(
+        cross_val_result = self.opt.get_fitted_models_and_metrics(
             X[self.selected_features], y, self.best_params | {'verbose': False}
         )
         self.mean_metrics = cross_val_result.mean_metrics
         self.models = cross_val_result.models
+        # Learn last available configuration on last data
+        self.model_params = self.hyperparams_optimizer_kws['parameter_ranges']
+        self.model_params.update(self.best_params)
+        max_week_start = X.index.to_period('W').start_time.max() + pd.DateOffset(days=1)
+        if max_week_start > X.index.max():
+            max_week_start -= pd.DateOffset(weeks=1)
+        self.last_train_period = (
+            max_week_start - pd.DateOffset(weeks=self.cross_val_split_kws['train_size_weeks']),
+            max_week_start
+        )
+        self.last_X_train = X[
+            (X.index >= self.last_train_period[0])
+            & (X.index < self.last_train_period[1])
+        ][self.selected_features]
+        self.last_y_train = y[
+            (y.index >= self.last_train_period[0])
+            & (y.index < self.last_train_period[1])
+        ]
+        self.model = self.model_class(**self.model_params)
+        self.model.fit(self.last_X_train, self.last_y_train)
         return self
     
     def prepare_data(
@@ -144,16 +166,21 @@ class BaselineModel(BaseModel):
         df: pd.DataFrame,
         taxes: pd.DataFrame,
         holidays: pd.DataFrame,
+        mean_prediction: bool = True,
     ) -> pd.Series:
         X, _ = self.prepare_data(
             df=df, taxes=taxes, holidays=holidays, inference=True
         )
-        predictions = np.zeros(X.shape[0])
-        for model in self.models:
-            predictions += model.predict(X)
-        mean_prediction = predictions / len(self.models)
-        result = pd.Series(mean_prediction)
-        result.index = X.index
+        if mean_prediction:
+            predictions = np.zeros(X.shape[0])
+            for model in self.models:
+                predictions += model.predict(X)
+            mean_prediction = predictions / len(self.models)
+            result = pd.Series(mean_prediction)
+            result.index = X.index
+        else:
+            result = pd.Series(self.model.predict(X))
+            result.index = X.index
         return result
         
     def _select_features(self, X: pd.DataFrame, y: pd.Series) -> List[str]:
@@ -170,6 +197,7 @@ class BaselineModel(BaseModel):
             for feature, freq in
             collections.Counter(features).most_common()
             if freq >= min_num_of_iter_where_feature_presented
+            or feature in ['is_holiday', 'is_nowork']
         ]
         return selected_features
         
@@ -197,7 +225,9 @@ class BaselineModel(BaseModel):
                 'bagging_temperature': lambda trial: trial.suggest_float('bagging_temperature', 0, 2),
                 'max_ctr_complexity': lambda trial: trial.suggest_int('max_ctr_complexity', 1, 4),
                 'early_stopping_rounds': 25,
-                'verbose': False
+                'verbose': False,
+                # "loss_function": LossForCatBoost(),
+                # "eval_metric": MetricForCatBoost()
             },
             'cross_val_score_kws': {
                 'loss': SimpleTargetLoss(),
@@ -229,6 +259,7 @@ class BaselineModel(BaseModel):
 
 
 class ExternalFactorsModel(BaseModel):
+    """Модель с catboost под капотом, использующая налоги, признаки ряда и внешние факторы"""
     def __init__(
         self,
         engineer_strategy_kws: Dict = {},
@@ -268,6 +299,26 @@ class ExternalFactorsModel(BaseModel):
         )
         self.mean_metrics = cross_val_result.mean_metrics
         self.models = cross_val_result.models
+        # Learn last available configuration on last data
+        self.model_params = self.hyperparams_optimizer_kws['parameter_ranges']
+        self.model_params.update(self.best_params)
+        max_week_start = X.index.to_period('W').start_time.max() + pd.DateOffset(days=1)
+        if max_week_start > X.index.max():
+            max_week_start -= pd.DateOffset(weeks=1)
+        self.last_train_period = (
+            max_week_start - pd.DateOffset(weeks=self.cross_val_split_kws['train_size_weeks']),
+            max_week_start
+        )
+        self.last_X_train = X[
+            (X.index >= self.last_train_period[0])
+            & (X.index < self.last_train_period[1])
+        ][self.selected_features]
+        self.last_y_train = y[
+            (y.index >= self.last_train_period[0])
+            & (y.index < self.last_train_period[1])
+        ]
+        self.model = self.model_class(**self.model_params)
+        self.model.fit(self.last_X_train, self.last_y_train)
         return self
 
     def prepare_data(
@@ -303,17 +354,22 @@ class ExternalFactorsModel(BaseModel):
         moex: pd.DataFrame,
         usd: pd.DataFrame,
         inflation: pd.DataFrame,
+        mean_prediction: bool = True,
     ) -> pd.Series:
         X, _ = self.prepare_data(
             df=df, taxes=taxes, holidays=holidays,
             moex=moex, usd=usd, inflation=inflation, inference=True
         )
-        predictions = np.zeros(X.shape[0])
-        for model in self.models:
-            predictions += model.predict(X)
-        mean_prediction = predictions / len(self.models)
-        result = pd.Series(mean_prediction)
-        result.index = X.index
+        if mean_prediction:
+            predictions = np.zeros(X.shape[0])
+            for model in self.models:
+                predictions += model.predict(X)
+            mean_prediction = predictions / len(self.models)
+            result = pd.Series(mean_prediction)
+            result.index = X.index
+        else:
+            result = pd.Series(self.model.predict(X))
+            result.index = X.index
         return result
 
     def _select_features(self, X: pd.DataFrame, y: pd.Series) -> List[str]:

@@ -25,6 +25,7 @@ class BaseFeatureEngineerStrategy(ABC):
     
 
 class BaselineFeatureEngineerStrategy(BaseFeatureEngineerStrategy):
+    """Создание базовых признаков (налоги + ряд)"""
     def __init__(
         self,
         target: str = 'balance',
@@ -49,6 +50,7 @@ class BaselineFeatureEngineerStrategy(BaseFeatureEngineerStrategy):
 
 
 class ExternalFactorsFeatureEngineerStrategy(BaseFeatureEngineerStrategy):
+    """Создание внешних признаков"""
     def __init__(
         self,
         target: str = 'balance',

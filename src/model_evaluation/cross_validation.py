@@ -100,7 +100,10 @@ def split_period_for_cross_val(
     # randomly choose n_folds from all week_starts
     if n_folds > len(week_starts):
         raise ValueError('n_folds must be less or equal than number of suitable weeks presented between min_date and max_date')
-    chosen_weeks = random.sample(sorted(week_starts), n_folds)
+    if n_folds < 0:
+        chosen_weeks = sorted(week_starts)
+    else:
+        chosen_weeks = random.sample(sorted(week_starts), n_folds)
     idx_splits = []
     for week_start in chosen_weeks:
         week_start_idx = np.where(days >= week_start)[0][0]
